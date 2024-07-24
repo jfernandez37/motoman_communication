@@ -50,21 +50,31 @@ class MotomanInterface(Node):
                 
         self._action_client = ActionClient(self, FollowJointTrajectory, "/follow_joint_trajectory")
 
-    def joint_state_cb_(self, msg):
+    def joint_state_cb_(self, msg: JointState):
+        """Saves the most recent joint state
+
+        Args:
+            msg (JointState): joint state message received from the /joint_states topic
+        """
         self.most_recent_joint_state = msg
     
     def robot_status_cb_(self, msg: RobotStatus):
+        """Prints an error message if there is an error
+
+        Args:
+            msg (RobotStatus): Robot status message received from the /robot_status topic
+        """
         if msg.error_codes != 0 and msg.in_error.val == 1:
             self.get_logger().info(f"Robot status error code: {msg.error_codes}")
             
         
     def start_trajectory_mode_(self):
+        """Starts the Motoros2 trajectory mode
+        """
         request = StartTrajMode.Request()
 
-        # Send the request
         future = self.start_traj_mode_client_.call_async(request)
 
-        # Wait for the response
         while not future.done():
             pass
         
@@ -73,28 +83,30 @@ class MotomanInterface(Node):
         self.get_logger().info(f"Start traj mode result code: {response.result_code}")
 
     def stop_trajectory_mode_(self):
+        """Stops the trajectory mode
+        """
         request = Trigger.Request()
 
-        # Send the request
         future = self.stop_traj_mode_client_.call_async(request)
 
-        # Wait for the response
         while not future.done():
             pass
     
-    def move_robot(self):
+    def move_robot(self, joint_index: int, degree: float):
+        """Moves the robot. The joint to move is selected through joint index.
+
+        Args:
+            joint_index (int): Index of which joint will be moved
+            degree (float): Degree that the joint will be moved by
+        """
         if self.most_recent_joint_state == None:
             print("No joint states received yet")
             return
-        
-        self.get_logger().info(f"Current state: \n\n{self.most_recent_joint_state}\n")
-        
+                
         new_joint_state = deepcopy(self.most_recent_joint_state)
         
-        new_joint_state.position[-1] += 0.25
-        
-        self.get_logger().info(f"After state: \n\n{new_joint_state}\n")
-        
+        new_joint_state.position[joint_index] += degree
+                
         self._action_client.wait_for_server()
         
         new_follow_joint_trajectory = FollowJointTrajectory.Goal()
@@ -122,12 +134,22 @@ class MotomanInterface(Node):
     
     def get_result_callback(self, future):
         result = future.result().result
-        self.get_logger().info(f'Error code: {result.error_string}')
-        rclpy.shutdown()
+        if result.error_code != 0:
+            self.get_logger().error(f'Error code: {result.error_string}')
+        else:
+            self.get_logger().info('Movement successful!')
         
-    def generate_joint_trajectory(self, joint_states: JointState):
+    def generate_joint_trajectory(self, joint_state: JointState):
+        """Generates a joint trajectory from the joint state parameter
+
+        Args:
+            joint_state (JointState): Target joint state
+
+        Returns:
+            JointTrajectory: Joint trajectory from the input joint state
+        """
         new_joint_trajectory = JointTrajectory()
-        new_joint_trajectory.joint_names = joint_states.name
+        new_joint_trajectory.joint_names = joint_state.name
         
         original_point = JointTrajectoryPoint()
         original_point.positions = self.most_recent_joint_state.position
@@ -136,7 +158,7 @@ class MotomanInterface(Node):
         new_joint_trajectory.points.append(original_point)
         
         new_point = JointTrajectoryPoint()
-        new_point.positions = joint_states.position
+        new_point.positions = joint_state.position
         new_point.velocities = [0.0] * 7
         new_point.time_from_start = rclpy.duration.Duration(seconds=10).to_msg()
         new_joint_trajectory.points.append(new_point)
