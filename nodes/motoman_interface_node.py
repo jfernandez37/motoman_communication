@@ -19,11 +19,8 @@ def main(args = None):
     
     sleep(1)
     motoman_interface.start_trajectory_mode_()
-    sleep(5)
-    motoman_interface.move_robot()
-    sleep(25)
+    motoman_interface.move_robot(-1, 0.25)
     motoman_interface.stop_trajectory_mode_()
-    sleep(20)
     
     motoman_interface.destroy_node()
     rclpy.shutdown()

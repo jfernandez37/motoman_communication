@@ -9,7 +9,6 @@ from copy import deepcopy
 from sensor_msgs.msg import JointState
 from control_msgs.action import FollowJointTrajectory
 from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
-from builtin_interfaces.msg import Duration as DurationMsg
 from industrial_msgs.msg import RobotStatus
 from motoros2_interfaces.srv import StartTrajMode
 from std_srvs.srv import Trigger
@@ -160,7 +159,7 @@ class MotomanInterface(Node):
         new_point = JointTrajectoryPoint()
         new_point.positions = joint_state.position
         new_point.velocities = [0.0] * 7
-        new_point.time_from_start = rclpy.duration.Duration(seconds=10).to_msg()
+        new_point.time_from_start = rclpy.duration.Duration(seconds=5).to_msg()
         new_joint_trajectory.points.append(new_point)
         
         return new_joint_trajectory
