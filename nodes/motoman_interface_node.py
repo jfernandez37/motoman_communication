@@ -19,7 +19,10 @@ def main(args = None):
     
     sleep(1)
     motoman_interface.start_trajectory_mode_()
-    motoman_interface.move_robot(-1, 0.25)
+    motoman_interface.move_robot(5, -0.081)
+    sleep(10)
+    # motoman_interface.move_robot(0, 0.755)
+    # sleep(10)
     motoman_interface.stop_trajectory_mode_()
     
     motoman_interface.destroy_node()

@@ -159,7 +159,7 @@ class MotomanInterface(Node):
         new_point = JointTrajectoryPoint()
         new_point.positions = joint_state.position
         new_point.velocities = [0.0] * 7
-        new_point.time_from_start = rclpy.duration.Duration(seconds=5).to_msg()
+        new_point.time_from_start = rclpy.duration.Duration(seconds=20).to_msg()
         new_joint_trajectory.points.append(new_point)
         
         return new_joint_trajectory

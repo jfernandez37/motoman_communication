@@ -28,9 +28,16 @@ endif()
 # Install Python modules
 ament_python_install_package(${PROJECT_NAME} SCRIPTS_DESTINATION lib/${PROJECT_NAME})
 
+# Install launch directory
+install(DIRECTORY
+  launch
+  DESTINATION share/${PROJECT_NAME}
+)
+
 # Install Python executables
 install(PROGRAMS
   nodes/motoman_interface_node.py
+  nodes/moveit_py_node.py
 
   DESTINATION lib/${PROJECT_NAME}
 )
