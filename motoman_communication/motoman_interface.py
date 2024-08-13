@@ -4,13 +4,15 @@ from rclpy.node import Node
 from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSHistoryPolicy
 from rclpy.action import ActionClient
 
+from rclpy.task import Future
+
 from copy import deepcopy
 
 from sensor_msgs.msg import JointState
 from control_msgs.action import FollowJointTrajectory
 from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
 from industrial_msgs.msg import RobotStatus
-from motoros2_interfaces.srv import StartTrajMode
+from motoros2_interfaces.srv import StartTrajMode, StartPointQueueMode, QueueTrajPoint
 from std_srvs.srv import Trigger
 
 class MotomanInterface(Node):
@@ -45,9 +47,21 @@ class MotomanInterface(Node):
             '/stop_traj_mode'
         )
         
+        self.start_point_queue_mode_client_ = self.create_client(
+            StartPointQueueMode,
+            '/start_point_queue_mode'
+        )
+        
+        self.queue_traj_point_client_ = self.create_client(
+            QueueTrajPoint,
+            '/queue_traj_point'
+        )
+        
         self.most_recent_joint_state: JointState = None
                 
         self._action_client = ActionClient(self, FollowJointTrajectory, "/follow_joint_trajectory")
+
+        self.goal_finished = False
 
     def joint_state_cb_(self, msg: JointState):
         """Saves the most recent joint state
@@ -81,6 +95,26 @@ class MotomanInterface(Node):
         
         self.get_logger().info(f"Start traj mode result code: {response.result_code}")
 
+    def start_point_queue_mode(self):
+        """Starts the Motoros2 trajectory mode
+        """
+        request = StartPointQueueMode.Request()
+
+        future = self.start_point_queue_mode_client_.call_async(request)
+
+        while not future.done():
+            pass
+        
+        goal_handle = future.result()
+        if not goal_handle.accepted:
+            self.get_logger().info('Goal rejected :(')
+            return
+            pass
+        
+        response: StartPointQueueMode.Response = future.result()
+        
+        self.get_logger().info(f"Start point queue mode result code: {response.result_code}")
+
     def stop_trajectory_mode_(self):
         """Stops the trajectory mode
         """
@@ -103,22 +137,37 @@ class MotomanInterface(Node):
             return
                 
         new_joint_state = deepcopy(self.most_recent_joint_state)
+
+        home_positions = [0.0, 0.0, 0.0, -1.571, 0.0]
         
-        new_joint_state.position[joint_index] += degree
-                
-        self._action_client.wait_for_server()
+        new_joint_state.position[3] = -1.3
         
-        new_follow_joint_trajectory = FollowJointTrajectory.Goal()
-        new_follow_joint_trajectory.trajectory = self.generate_joint_trajectory(new_joint_state)
+        original_point = JointTrajectoryPoint()
+        original_point.positions = self.most_recent_joint_state.position
+        original_point.velocities = [0.0] * 7
+        original_point.time_from_start = rclpy.duration.Duration(seconds=0).to_msg()
         
-        self.get_logger().info(f"Goal:\n\n{new_follow_joint_trajectory}\n\n")
+        self.queue_traj_point(self.most_recent_joint_state.name, original_point)
         
-        future = self._action_client.send_goal_async(new_follow_joint_trajectory)
+        new_point = JointTrajectoryPoint()
+        new_point.positions = new_joint_state.position
+        new_point.velocities = [0.0] * 7
+        new_point.time_from_start = rclpy.duration.Duration(seconds=20).to_msg()
         
-        while not future.done():
-            pass
+        self.queue_traj_point(self.most_recent_joint_state, new_point)
+        # self._action_client.wait_for_server()
         
-        future.add_done_callback(self.goal_response_callback)
+        # new_follow_joint_trajectory = FollowJointTrajectory.Goal()
+        # new_follow_joint_trajectory.trajectory = self.generate_joint_trajectory(new_joint_state)
+        
+        # self.get_logger().info(f"Goal:\n\n{new_follow_joint_trajectory}\n\n")
+        
+        # future = self._action_client.send_goal_async(new_follow_joint_trajectory)
+        
+        # while not future.done():
+        #     pass
+        
+        # future.add_done_callback(self.goal_response_callback)
 
     def goal_response_callback(self, future):
         goal_handle = future.result()
@@ -137,6 +186,8 @@ class MotomanInterface(Node):
             self.get_logger().error(f'Error code: {result.error_string}')
         else:
             self.get_logger().info('Movement successful!')
+            
+        self.goal_finished = True
         
     def generate_joint_trajectory(self, joint_state: JointState):
         """Generates a joint trajectory from the joint state parameter
@@ -159,7 +210,24 @@ class MotomanInterface(Node):
         new_point = JointTrajectoryPoint()
         new_point.positions = joint_state.position
         new_point.velocities = [0.0] * 7
-        new_point.time_from_start = rclpy.duration.Duration(seconds=20).to_msg()
+        new_point.time_from_start = rclpy.duration.Duration(seconds=60).to_msg()
         new_joint_trajectory.points.append(new_point)
         
         return new_joint_trajectory
+
+    def queue_traj_point(self, point: JointTrajectoryPoint):
+        request = QueueTrajPoint.Request()
+
+        request.point = point
+        future = self.queue_traj_point_client_.call_async(request)
+
+        while not future.done():
+            pass
+        
+        response: QueueTrajPoint.Response = future.result()
+        
+        self.get_logger().info(f"Start point queue mode result code: {response.result_code}")
+        
+    def feedback_cb(self, feedback: FollowJointTrajectory.Feedback):
+        self.get_logger().info(f'Joint 4 position: {feedback.actual.positions[3]}')
+        
